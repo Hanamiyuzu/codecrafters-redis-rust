@@ -50,10 +50,7 @@ fn parse_integers(buffer: &[u8]) -> Result<(RespType<'_>, &[u8])> {
     let (a, b) = split_crlf_once(buffer)?;
     #[rustfmt::skip]
     let sgn = if matches!(a.first(), Some(&x) if x == b'-') { -1i64 } else { 1i64 };
-    let num = str::from_utf8(&a[1..])
-        .unwrap()
-        .parse::<i64>()
-        .unwrap();
+    let num = str::from_utf8(&a[1..]).unwrap().parse::<i64>().unwrap();
     Ok((RespType::Integers(sgn * num), b))
 }
 
@@ -106,7 +103,9 @@ impl<'a> fmt::Display for RespType<'a> {
             RespType::SimpleStrings(x) => write!(f, "+{}\r\n", str::from_utf8(x).unwrap()),
             RespType::SimpleErrors(x) => write!(f, "-{}\r\n", str::from_utf8(x).unwrap()),
             RespType::Integers(x) => write!(f, ":{}\r\n", x),
-            RespType::BulkStrings(x) => write!(f, "${}\r\n{}\r\n", x.len(), str::from_utf8(x).unwrap()),
+            RespType::BulkStrings(x) => {
+                write!(f, "${}\r\n{}\r\n", x.len(), str::from_utf8(x).unwrap())
+            }
             RespType::Arrays(x) => {
                 write!(f, "*{}\r\n", x.len())?;
                 for xx in x.iter() {
