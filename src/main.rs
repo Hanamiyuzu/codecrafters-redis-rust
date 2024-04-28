@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use resp::{parse_resp, RespType};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
+    net::TcpListener, process::Command,
 };
 
 #[tokio::main]
@@ -23,8 +23,8 @@ async fn main() -> Result<()> {
                     let (a, _) = parse_resp(&buf[0..n]).unwrap();
                     let response = if let Ok((command, args)) = extract_command(a) {
                         match command {
-                            b"ping" => RespType::SimpleStrings(b"PONG"),
-                            b"echo" => args.first().unwrap().clone(),
+                            command if command.eq_ignore_ascii_case(b"ping") => RespType::SimpleStrings(b"PONG"),
+                            command if command.eq_ignore_ascii_case(b"echo") => args.first().unwrap().clone(),
                             _ => unreachable!(),
                         }
                     } else {
