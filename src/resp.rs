@@ -2,13 +2,13 @@ use anyhow::{anyhow, Context, Result};
 use core::fmt;
 use std::str;
 
-#[derive(Clone, Debug)]
-pub enum RespType<'a> {
-    SimpleStrings(&'a [u8]),
-    SimpleErrors(&'a [u8]),
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum RespType {
+    SimpleStrings(String),
+    SimpleErrors(String),
     Integers(i64),
-    BulkStrings(&'a [u8]),
-    Arrays(Vec<RespType<'a>>),
+    BulkStrings(Vec<u8>),
+    Arrays(Vec<RespType>),
     Nulls,
     Booleans,
     Doubles,
@@ -20,9 +20,9 @@ pub enum RespType<'a> {
     Pushes,
 }
 
-impl<'a> RespType<'a> {}
+impl RespType {}
 
-pub fn parse_resp(buffer: &[u8]) -> Result<(RespType<'_>, &[u8])> {
+pub fn parse_resp(buffer: &[u8]) -> Result<(RespType, &[u8])> {
     if buffer.is_empty() {
         unimplemented!();
     }
@@ -36,17 +36,17 @@ pub fn parse_resp(buffer: &[u8]) -> Result<(RespType<'_>, &[u8])> {
     }
 }
 
-fn parse_simple_strings(buffer: &[u8]) -> Result<(RespType<'_>, &[u8])> {
+fn parse_simple_strings(buffer: &[u8]) -> Result<(RespType, &[u8])> {
     let (a, b) = split_crlf_once(buffer)?;
-    Ok((RespType::SimpleStrings(a), b))
+    Ok((RespType::SimpleStrings(String::from_utf8(a.to_vec())?), b))
 }
 
-fn parse_simple_errors(buffer: &[u8]) -> Result<(RespType<'_>, &[u8])> {
+fn parse_simple_errors(buffer: &[u8]) -> Result<(RespType, &[u8])> {
     let (a, b) = split_crlf_once(buffer)?;
-    Ok((RespType::SimpleErrors(a), b))
+    Ok((RespType::SimpleErrors(String::from_utf8(a.to_vec())?), b))
 }
 
-fn parse_integers(buffer: &[u8]) -> Result<(RespType<'_>, &[u8])> {
+fn parse_integers(buffer: &[u8]) -> Result<(RespType, &[u8])> {
     let (a, b) = split_crlf_once(buffer)?;
     #[rustfmt::skip]
     let sgn = if matches!(a.first(), Some(&x) if x == b'-') { -1i64 } else { 1i64 };
@@ -54,14 +54,14 @@ fn parse_integers(buffer: &[u8]) -> Result<(RespType<'_>, &[u8])> {
     Ok((RespType::Integers(sgn * num), b))
 }
 
-fn parse_bulk_strings(buffer: &[u8]) -> Result<(RespType<'_>, &[u8])> {
+fn parse_bulk_strings(buffer: &[u8]) -> Result<(RespType, &[u8])> {
     let (a, b) = split_crlf_once(buffer)?;
     let len = str::from_utf8(a).unwrap().parse().unwrap();
     let (c, d) = split_crlf_at(b, len)?;
-    Ok((RespType::BulkStrings(c), d))
+    Ok((RespType::BulkStrings(c.to_vec()), d))
 }
 
-fn parse_arrays(buffer: &[u8]) -> Result<(RespType<'_>, &[u8])> {
+fn parse_arrays(buffer: &[u8]) -> Result<(RespType, &[u8])> {
     let (a, b) = split_crlf_once(buffer)?;
     let num = str::from_utf8(a).unwrap().parse().unwrap();
     let mut res = Vec::with_capacity(num);
@@ -97,14 +97,18 @@ fn split_crlf_at(buffer: &[u8], mid: usize) -> Result<(&[u8], &[u8])> {
     }
 }
 
-impl<'a> fmt::Display for RespType<'a> {
+impl fmt::Display for RespType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            RespType::SimpleStrings(x) => write!(f, "+{}\r\n", str::from_utf8(x).unwrap()),
-            RespType::SimpleErrors(x) => write!(f, "-{}\r\n", str::from_utf8(x).unwrap()),
-            RespType::Integers(x) => write!(f, ":{}\r\n", x),
+            RespType::SimpleStrings(x) => write!(f, "+{x}\r\n"),
+            RespType::SimpleErrors(x) => write!(f, "-{x}\r\n"),
+            RespType::Integers(x) => write!(f, ":{x}\r\n"),
             RespType::BulkStrings(x) => {
-                write!(f, "${}\r\n{}\r\n", x.len(), str::from_utf8(x).unwrap())
+                if x.is_empty() {
+                    write!(f, "$-1\r\n")
+                } else {
+                    write!(f, "${}\r\n{}\r\n", x.len(), str::from_utf8(x).unwrap())
+                }
             }
             RespType::Arrays(x) => {
                 write!(f, "*{}\r\n", x.len())?;

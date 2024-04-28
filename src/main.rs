@@ -1,5 +1,7 @@
 pub mod resp;
 
+use std::collections::HashMap;
+
 use anyhow::{Context, Result};
 use resp::{parse_resp, RespType};
 use tokio::{
@@ -14,6 +16,7 @@ async fn main() -> Result<()> {
         let (mut socket, _) = listener.accept().await?;
         tokio::spawn(async move {
             let mut buf = [0; 1024];
+            let mut map = HashMap::new();
             loop {
                 let n = match socket.read(&mut buf).await {
                     Ok(n) if n > 0 => n,
@@ -24,10 +27,21 @@ async fn main() -> Result<()> {
                     let response = if let Ok((command, args)) = extract_command(a) {
                         match command {
                             command if command.eq_ignore_ascii_case(b"ping") => {
-                                RespType::SimpleStrings(b"PONG")
+                                RespType::SimpleStrings("PONG".to_string())
                             }
                             command if command.eq_ignore_ascii_case(b"echo") => {
                                 args.first().unwrap().clone()
+                            }
+                            command if command.eq_ignore_ascii_case(b"set") => {
+                                map.insert(args.first().unwrap().clone(), args[1].clone());
+                                RespType::SimpleStrings("OK".to_string())
+                            }
+                            command if command.eq_ignore_ascii_case(b"get") => {
+                                if let Some(x) = map.get(args.first().unwrap()) {
+                                    x.clone()
+                                } else {
+                                    RespType::BulkStrings(Vec::new())
+                                }
                             }
                             _ => unreachable!(),
                         }
@@ -42,12 +56,12 @@ async fn main() -> Result<()> {
     //Ok(())
 }
 
-fn extract_command(resp: RespType) -> Result<(&[u8], Vec<RespType>)> {
+fn extract_command(resp: RespType) -> Result<(Vec<u8>, Vec<RespType>)> {
     match resp {
         RespType::Arrays(x) => {
             let command = x.first().context("Arrays(x) is empty?")?;
             if let RespType::BulkStrings(command) = command {
-                Ok((command, x.into_iter().skip(1).collect()))
+                Ok((command.to_owned(), x.into_iter().skip(1).collect()))
             } else {
                 unimplemented!();
             }
