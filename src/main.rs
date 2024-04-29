@@ -1,10 +1,10 @@
-pub mod command;
+pub mod redis;
 pub mod resp;
 
 use std::{collections::HashMap, env};
 
 use anyhow::{Context, Result};
-use command::{redis_run, RedisCommand};
+use redis::{redis_run, RedisCommand};
 use resp::{parse_resp, RespType};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -40,36 +40,43 @@ async fn main() -> Result<()> {
                 if n > 0 {
                     let (a, _) = parse_resp(&buf[0..n]).unwrap();
                     let response = if let Ok((command, args)) = extract_command(a) {
-                        match command {
-                            command if command.eq_ignore_ascii_case(b"ping") => {
-                                RespType::SimpleStrings("PONG".to_string())
-                            }
-                            command if command.eq_ignore_ascii_case(b"echo") => {
-                                args.first().unwrap().clone()
-                            }
-                            command if command.eq_ignore_ascii_case(b"set") => {
-                                let (reply_tx, mut reply_rx) = mpsc::channel(1);
-                                let _ = tx.send((RedisCommand::Set(args), reply_tx)).await;
-                                if let Some(response) = reply_rx.recv().await {
-                                    assert_eq!(response.0.len(), 1);
-                                    response.0[0].clone()
-                                } else {
-                                    unreachable!();
+                        if let Some(command) = RedisCommandType::from(&command) {
+                            match command {
+                                RedisCommandType::Ping => {
+                                    RespType::SimpleStrings("PONG".to_string())
+                                }
+                                RedisCommandType::Echo => args.first().unwrap().clone(),
+                                RedisCommandType::Info => {
+                                    if args.is_empty() {
+                                        unimplemented!();
+                                    }
+                                    RespType::BulkStrings(b"role:master".to_vec())
+                                }
+                                RedisCommandType::Set => {
+                                    let (reply_tx, mut reply_rx) = mpsc::channel(1);
+                                    let _ = tx.send((RedisCommand::Set(args), reply_tx)).await;
+                                    if let Some(response) = reply_rx.recv().await {
+                                        assert_eq!(response.0.len(), 1);
+                                        response.0[0].clone()
+                                    } else {
+                                        unreachable!();
+                                    }
+                                }
+                                RedisCommandType::Get => {
+                                    let (reply_tx, mut reply_rx) = mpsc::channel(1);
+                                    let _ = tx
+                                        .send((RedisCommand::Get(args[0].clone()), reply_tx))
+                                        .await;
+                                    if let Some(response) = reply_rx.recv().await {
+                                        assert_eq!(response.0.len(), 1);
+                                        response.0[0].clone()
+                                    } else {
+                                        unreachable!();
+                                    }
                                 }
                             }
-                            command if command.eq_ignore_ascii_case(b"get") => {
-                                let (reply_tx, mut reply_rx) = mpsc::channel(1);
-                                let _ = tx
-                                    .send((RedisCommand::Get(args[0].clone()), reply_tx))
-                                    .await;
-                                if let Some(response) = reply_rx.recv().await {
-                                    assert_eq!(response.0.len(), 1);
-                                    response.0[0].clone()
-                                } else {
-                                    unreachable!();
-                                }
-                            }
-                            _ => unreachable!(),
+                        } else {
+                            unimplemented!();
                         }
                     } else {
                         unimplemented!();
@@ -100,7 +107,27 @@ fn parse_command_line_args() -> HashMap<String, String> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     // simple parse
     args.chunks_exact(2)
-        .into_iter()
         .map(|x| (x[0].clone(), x[1].clone()))
         .collect()
+}
+
+enum RedisCommandType {
+    Ping,
+    Echo,
+    Info,
+    Set,
+    Get,
+}
+
+impl RedisCommandType {
+    fn from(str: &[u8]) -> Option<Self> {
+        match str {
+            str if str.eq_ignore_ascii_case(b"ping") => Some(RedisCommandType::Ping),
+            str if str.eq_ignore_ascii_case(b"echo") => Some(RedisCommandType::Echo),
+            str if str.eq_ignore_ascii_case(b"info") => Some(RedisCommandType::Info),
+            str if str.eq_ignore_ascii_case(b"set") => Some(RedisCommandType::Set),
+            str if str.eq_ignore_ascii_case(b"get") => Some(RedisCommandType::Get),
+            _ => None,
+        }
+    }
 }
