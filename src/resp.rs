@@ -52,7 +52,7 @@ fn parse_integers(buffer: &[u8]) -> Result<(RespType, &[u8])> {
     //#[rustfmt::skip]
     //let sgn = if matches!(a.first(), Some(&x) if x == b'-') { -1i64 } else { 1i64 };
     let num = str::from_utf8(a).unwrap().parse::<i64>().unwrap();
-    Ok((RespType::Integers(/*sgn * */num), b))
+    Ok((RespType::Integers(/*sgn * */ num), b))
 }
 
 fn parse_bulk_strings(buffer: &[u8]) -> Result<(RespType, &[u8])> {

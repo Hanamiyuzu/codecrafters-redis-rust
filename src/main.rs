@@ -1,6 +1,8 @@
 pub mod command;
 pub mod resp;
 
+use std::{collections::HashMap, env};
+
 use anyhow::{Context, Result};
 use command::{redis_run, RedisCommand};
 use resp::{parse_resp, RespType};
@@ -12,10 +14,19 @@ use tokio::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let command_args = parse_command_line_args();
+
+    let port = if let Some(port) = command_args.get("--port") {
+        port.parse().unwrap()
+    } else {
+        6379
+    };
+    let addr = format!("127.0.0.1:{port}");
+
     let (tx, rx) = mpsc::channel(100);
     tokio::spawn(redis_run(rx));
 
-    let listener = TcpListener::bind("127.0.0.1:6379").await?;
+    let listener = TcpListener::bind(addr).await?;
     loop {
         let (mut socket, _) = listener.accept().await?;
         let tx = tx.clone();
@@ -83,4 +94,13 @@ fn extract_command(resp: RespType) -> Result<(Vec<u8>, Vec<RespType>)> {
         }
         _ => unimplemented!(),
     }
+}
+
+fn parse_command_line_args() -> HashMap<String, String> {
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    // simple parse
+    args.chunks_exact(2)
+        .into_iter()
+        .map(|x| (x[0].clone(), x[1].clone()))
+        .collect()
 }
