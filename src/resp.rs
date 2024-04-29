@@ -51,7 +51,7 @@ fn parse_integers(buffer: &[u8]) -> Result<(RespType, &[u8])> {
     let (a, b) = split_crlf_once(buffer)?;
     #[rustfmt::skip]
     let sgn = if matches!(a.first(), Some(&x) if x == b'-') { -1i64 } else { 1i64 };
-    let num = str::from_utf8(&a[1..]).unwrap().parse::<i64>().unwrap();
+    let num = str::from_utf8(a).unwrap().parse::<i64>().unwrap();
     Ok((RespType::Integers(sgn * num), b))
 }
 
