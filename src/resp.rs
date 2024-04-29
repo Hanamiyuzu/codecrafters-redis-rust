@@ -2,13 +2,14 @@ use anyhow::{anyhow, Context, Result};
 use core::fmt;
 use std::str;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum RespType {
     SimpleStrings(String),
     SimpleErrors(String),
     Integers(i64),
     BulkStrings(Vec<u8>),
     Arrays(Vec<RespType>),
+    #[default]
     Nulls,
     Booleans,
     Doubles,
