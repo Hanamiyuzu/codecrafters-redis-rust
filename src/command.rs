@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    str,
     time::{Duration, Instant},
 };
 
@@ -39,11 +40,19 @@ impl Redis {
                     if let RespType::Integers(seconds) = arg {
                         duration += Duration::from_secs(*seconds as u64);
                         continue;
+                    } else if let RespType::BulkStrings(seconds) = arg {
+                        duration +=
+                            Duration::from_secs(str::from_utf8(seconds).unwrap().parse().unwrap());
+                        continue;
                     }
                 }
                 option if option.eq_ignore_ascii_case(b"PX") => {
-                    if let RespType::Integers(milliseconds) = arg {
-                        duration += Duration::from_millis(*milliseconds as u64);
+                    if let RespType::Integers(millis) = arg {
+                        duration += Duration::from_millis(*millis as u64);
+                        continue;
+                    } else if let RespType::BulkStrings(millis) = arg {
+                        duration +=
+                            Duration::from_millis(str::from_utf8(millis).unwrap().parse().unwrap());
                         continue;
                     }
                 }
