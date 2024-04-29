@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
                                 RespType::SimpleStrings("PONG".to_string())
                             }
                             command if command.eq_ignore_ascii_case(b"echo") => {
-                                args[1..].first().unwrap().clone()
+                                args.first().unwrap().clone()
                             }
                             command if command.eq_ignore_ascii_case(b"set") => {
                                 let (reply_tx, mut reply_rx) = mpsc::channel(1);
