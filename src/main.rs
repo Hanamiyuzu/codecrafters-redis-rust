@@ -1,6 +1,8 @@
 pub mod redis;
 pub mod resp;
 
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use redis::{redis_run, RedisCommand};
@@ -11,18 +13,21 @@ use tokio::{
     sync::mpsc,
 };
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(short, long, default_value_t = 6379)]
     port: u16,
+
+    #[arg(short, long, num_args = 2)]
+    replicaof: Option<Vec<String>>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
+    let cmd_args = Arc::new(Args::parse());
 
-    let port = args.port;
+    let port = cmd_args.port;
     let addr = format!("127.0.0.1:{port}");
 
     let (tx, rx) = mpsc::channel(100);
@@ -32,6 +37,7 @@ async fn main() -> Result<()> {
     loop {
         let (mut socket, _) = listener.accept().await?;
         let tx = tx.clone();
+        let cmd_args = cmd_args.clone();
         tokio::spawn(async move {
             let mut buf = [0; 1024];
             loop {
@@ -52,7 +58,11 @@ async fn main() -> Result<()> {
                                     if args.is_empty() {
                                         unimplemented!();
                                     }
-                                    RespType::BulkStrings(b"role:master".to_vec())
+                                    if cmd_args.replicaof.is_some() {
+                                        RespType::BulkStrings(b"role:slave".to_vec())
+                                    } else {
+                                        RespType::BulkStrings(b"role:master".to_vec())
+                                    }
                                 }
                                 RedisCommandType::Set => {
                                     let (reply_tx, mut reply_rx) = mpsc::channel(1);
