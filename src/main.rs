@@ -1,9 +1,8 @@
 pub mod redis;
 pub mod resp;
 
-use std::{collections::HashMap, env};
-
 use anyhow::{Context, Result};
+use clap::Parser;
 use redis::{redis_run, RedisCommand};
 use resp::{parse_resp, RespType};
 use tokio::{
@@ -12,15 +11,18 @@ use tokio::{
     sync::mpsc,
 };
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value_t = 6379)]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let command_args = parse_command_line_args();
+    let args = Args::parse();
 
-    let port = if let Some(port) = command_args.get("--port") {
-        port.parse().unwrap()
-    } else {
-        6379
-    };
+    let port = args.port;
     let addr = format!("127.0.0.1:{port}");
 
     let (tx, rx) = mpsc::channel(100);
@@ -101,14 +103,6 @@ fn extract_command(resp: RespType) -> Result<(Vec<u8>, Vec<RespType>)> {
         }
         _ => unimplemented!(),
     }
-}
-
-fn parse_command_line_args() -> HashMap<String, String> {
-    let args = env::args().skip(1).collect::<Vec<_>>();
-    // simple parse
-    args.chunks_exact(2)
-        .map(|x| (x[0].clone(), x[1].clone()))
-        .collect()
 }
 
 enum RedisCommandType {
